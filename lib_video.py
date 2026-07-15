@@ -106,7 +106,6 @@ def get_image(image, transforms=None):
 
     return image
 
-
 def get_valid_transform():
     """
     Преобразование изображения
