@@ -112,25 +112,8 @@ dishes_choosed = None
 dishes_prev = None
 dishes_ = None
 # Read until video is completed
-
-
-Times = [
-[(9 * 60  + 15)*25, (9*60 + 45)*25],
-[(9 * 60  + 55)*25, (9*60 + 45)*25],
-[(10 * 60  + 20)*25, (10*60 + 30)*25],
-[(11 * 60  + 15)*25, (11*60 + 40)*25],
-[(27 * 60  + 10)*25, (27*60 + 30)*25],
-[(100 * 60  + 15)*25, (100*60 + 60)*25]]
-
-
-def status_check(iii):
-    this_order = 0
-    while iii > Times[this_order][1]:
-        this_order += 1
-    if iii >= Times[this_order][0] and iii < Times[this_order][1]:
-        return True
-    return False
-
+    
+while(iii < 500):
     iii += 1
     print(iii)
     # Capture frame-by-frame

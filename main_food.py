@@ -23,7 +23,7 @@ classes_filename = 'TestVideo//classes_back.joblib'
 model_filename = 'TestVideo//fasterrcnn_resnet50_fpn_530.pth'
 classvalue_filename = 'TestVideo//class_value.csv'
 teamodel_name = 'TestVideo//ResNet18.pth'
-videofilename = 'TestVideo//Cam 8_01_02_2025 11.50.00.mp4'
+videofile_name = 'TestVideo//Cam 8_01_02_2025 11.50.00.mp4'
 
 # Create a VideoCapture object and read from input file
 # If the input is the camera, pass 0 instead of the video file name
