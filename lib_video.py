@@ -21,6 +21,19 @@ from torchvision import transforms
 
 import matplotlib.pyplot as plt
 
+MAX_COLOR_INDEX = 29
+DISTANCE_THRESHOLD = 0.4
+HIGH_OVERLAP_THRESHOLD = 0.9
+
+OVERLAP_THRESHOLD = {}
+OVERLAP_THRESHOLD[1] = 0.5
+OVERLAP_THRESHOLD[2] = 0.5
+OVERLAP_THRESHOLD[3] = 0.8
+OVERLAP_THRESHOLD[4] = 0.6
+OVERLAP_THRESHOLD[5] = 0.5
+OVERLAP_THRESHOLD[6] = 0.6
+OVERLAP_THRESHOLD[7] = 0.6
+OVERLAP_THRESHOLD[8] = 0.5
 
 transform = transforms.Compose([
     ToTensor(),
@@ -44,7 +57,14 @@ def count_diff(frame, frame_back):
         мера близости фреймов
 
     """
-    a = np.abs(frame[:, :, :] - frame_back[:, :, :])
+    if frame.shape[0] == frame_back.shape[0] and frame.shape[1] == frame_back.shape[1] and frame.shape[2] == frame_back.shape[2]:
+        a = np.abs(frame[:, :, :] - frame_back[:, :, :])
+    else:
+        a = np.abs(frame[:min(frame.shape[0], frame_back.shape[0]), 
+                         :min(frame.shape[1], frame_back.shape[1]), 
+                         :min(frame.shape[2], frame_back.shape[2])] - frame_back[:min(frame.shape[0], frame_back.shape[0]), 
+                                                                                 :min(frame.shape[1], frame_back.shape[1]), 
+                                                                                 :min(frame.shape[2], frame_back.shape[2])])
     a1 = np.sum(a, axis = 2)
     d = np.argwhere(a1 > 110).shape[0]
     return d
@@ -153,12 +173,12 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
             dishes[i] = []
             dishes_choosed[i] = []
 
-        while outputs[N]['scores'][it].detach().numpy() > class_value[int(outputs[N]['labels'][it].numpy())] and it < len(outputs[N]['boxes']) - 1:
+        while outputs[N]['scores'][it].detach().numpy() > class_value[int(outputs[N]['labels'][it].numpy())] and it + 1 < len(outputs[N]['boxes']):
             box = outputs[N]['boxes'][it].detach().numpy().astype(int)
             if box[3] > 220 and box[2] > 600 and box[1] < 980 and box[0] < 1700:
                 class_this = classes_back[int(outputs[N]['labels'][it].numpy())]
 
-                if class_this == [904, 705, 706, 1602, 1603]:
+                if class_this in [904, 705, 706, 1602, 1603]:
                     dish = {}
                     dish['class'] = class_this
                     dish['box'] = outputs[N]['boxes'][it].detach().numpy().astype(int)
@@ -314,7 +334,7 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
             used = False
             for n2 in dishes_choosed[1]:
                 s = overfit(n['box'], n2['box'])
-                if s > 0.5 and used is False:
+                if s > OVERLAP_THRESHOLD[1] and used is False:
                     if n2['in'] == 0 and n['in'] == 1:
                         dishes_choosed[1].remove(n2)
                         dishes_choosed[1].append(n)
@@ -331,7 +351,7 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
             used = False
             for n2 in dishes_choosed[2]:
                 s = overfit(n['box'], n2['box'])
-                if s > 0.5 and used is False:
+                if s > OVERLAP_THRESHOLD[2] and used is False:
                     if n2['in'] == 0 and n['in'] == 1:
                         dishes_choosed[2].remove(n2)
                         dishes_choosed[2].append(n)
@@ -345,7 +365,7 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
             used = False
             for n2 in dishes_choosed[8]:
                 s = overfit(n['box'], n2['box'])
-                if s > 0.5 and used is False:
+                if s > OVERLAP_THRESHOLD[8] and used is False:
                     if n2['in'] == 0 and n['in'] == 1:
                         dishes_choosed[8].remove(n2)
                         dishes_choosed[8].append(n)
@@ -358,7 +378,7 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
             used = False
             for n2 in dishes_choosed[3]:
                 s = overfit(n['box'], n2['box'])
-                if s > 0.8 and used is False:
+                if s > OVERLAP_THRESHOLD[3] and used is False:
                     if n2['in'] == 0 and n['in'] == 1:
                         dishes_choosed[3].remove(n2)
                         dishes_choosed[3].append(n)
@@ -374,7 +394,7 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
             used = False
             for n2 in dishes_choosed[4]:
                 s = overfit(n['box'], n2['box'])
-                if s > 0.6 and used is False:
+                if s > OVERLAP_THRESHOLD[4] and used is False:
                     if n2['in'] == 0 and n['in'] == 1:
                         dishes_choosed[4].remove(n2)
                         dishes_choosed[4].append(n)
@@ -394,7 +414,7 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
             for n2 in dishes_choosed[5]:
                 s = overfit(n['box'], n2['box'])
 
-                if s > 0.5 and used is False:
+                if s > OVERLAP_THRESHOLD[5] and used is False:
                     if n2['in'] == 0 and n['in'] == 1 and n['class'] < 900:
                         dishes_choosed[5].remove(n2)
                         dishes_choosed[5].append(n)
@@ -412,7 +432,7 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
             used = False
             for n2 in dishes_choosed[7]:
                 s = overfit(n['box'], n2['box'])
-                if s > 0.6 and used is False:
+                if s > OVERLAP_THRESHOLD[7] and used is False:
                     used = True
             if n['in'] == 1 and used is False:
                 dishes_choosed[7].append(n)
@@ -422,11 +442,11 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
                 used = False
                 for n2 in dishes_choosed[1]:
                     s = overfit(n['box'], n2['box'])
-                    if s > 0.6:
+                    if s > OVERLAP_THRESHOLD[6]:
                         used = True
                 for n2 in dishes_choosed[7]:
                     s = overfit(n['box'], n2['box'])
-                    if s > 0.6:
+                    if s > OVERLAP_THRESHOLD[6]:
                         used = True
                 if used is False:
                     dishes_choosed[6].append(n)
@@ -435,7 +455,7 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
                 used = False
                 for n2 in dishes_choosed[1]:
                     s = overfit(n['box'], n2['box'])
-                    if s > 0.6:
+                    if s > OVERLAP_THRESHOLD[6]:
                         used = True
                 if used is False:
                     dishes_choosed[6].append(n)
@@ -445,7 +465,7 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
                 used = False
                 for n2 in dishes_choosed[1]:
                     s = overfit(n['box'], n2['box'])
-                    if s > 0.6:
+                    if s > OVERLAP_THRESHOLD[6]:
                         dishes_choosed[1].remove(n2)
                         if 'add' not in n2:
                             n2['add'] = [n['class']]
@@ -455,7 +475,7 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
                         
                 for n2 in dishes_choosed[2]:
                     s = overfit(n['box'], n2['box'])
-                    if s > 0.6:
+                    if s > OVERLAP_THRESHOLD[6]:
                         dishes_choosed[2].remove(n2)
                         if 'add' not in n2:
                             n2['add'] = [n['class']]
@@ -534,7 +554,7 @@ def plot_image(frame, dishes, headers, ec):
                 it += 1
                 ii += 1
                 
-                if ii > 29:
+                if ii > MAX_COLOR_INDEX:
                     ii = 0
                 
         
@@ -666,7 +686,7 @@ def compare(dishes_old, dishes_new):
                 a = np.argmax(df['dist'])
                 n_old_ = df['id'].values[a]
             
-                if np.max(df['dist']) > 0.4:
+                if np.max(df['dist']) > DISTANCE_THRESHOLD:
                     dishes_old[t][n_old_]['used'] = 1
                     dishes_new[t][n]['used'] = 1
                 
@@ -748,7 +768,7 @@ def compare(dishes_old, dishes_new):
                 a = np.argmax(df['dist'])
                 n_old_ = df['id'].values[a]
                 
-                if np.max(df['dist']) > 0.9:
+                if np.max(df['dist']) > HIGH_OVERLAP_THRESHOLD:
                     dishes_old[t][n_old_]['used'] = 1
                     dishes_new[t][n]['used'] = 1
                         

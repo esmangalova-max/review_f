@@ -7,11 +7,15 @@ import lib_video as libv
 import torch
 
 import copy
+import os
+from pathlib import Path
+
+
 #import ffmpegcv
 
 this_order = 0
 
-device = torch.device('cuda') #if torch.cuda.is_available() else torch.device('cpu')
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
 menu_filename = 'TestVideo//0102.tsv'
@@ -19,29 +23,61 @@ classes_filename = 'TestVideo//classes_back.joblib'
 model_filename = 'TestVideo//fasterrcnn_resnet50_fpn_530.pth'
 classvalue_filename = 'TestVideo//class_value.csv'
 teamodel_name = 'TestVideo//ResNet18.pth'
+videofile_name = 'TestVideo//Cam 8_01_02_2025 11.50.00.mp4'
 
 # Create a VideoCapture object and read from input file
 # If the input is the camera, pass 0 instead of the video file name
-cap = cv2.VideoCapture('TestVideo//Cam 8_01_02_2025 11.50.00.mp4')
-frame_width = int((1920 + 1000)/2)
-frame_height = int(1080/2)
+cap = cv2.VideoCapture(videofile_name)
+
+width = 1920
+height = 1080
+
+frame_width = int((width + 1000)/2)
+frame_height = int(height/2)
 out = cv2.VideoWriter('test0102.avi',cv2.VideoWriter_fourcc('M','J','P','G'), 5, (frame_width,frame_height))
 #out = ffmpegcv.VideoWriter('output.mp4', None, 25)
 
 
+file_obj = Path(menu_filename)
 
-menu_list, menu_day = libv.make_menu(menu_filename)
-classes_back = libv.make_classes_back(classes_filename)
+if file_obj.exists():
+    menu_list, menu_day = libv.make_menu(menu_filename)
+else:
+    print(f"Файл {menu_filename} не найден. Создайте его или проверьте путь.")
+ 
+ 
+file_obj = Path(classes_filename)
+
+if file_obj.exists():
+    classes_back = libv.make_classes_back(classes_filename)
+else:
+    print(f"Файл {classes_filename} не найден. Создайте его или проверьте путь.")
   
+file_obj = Path(classvalue_filename)
 
-class_value = libv.make_classes_values(classvalue_filename)
+if file_obj.exists():
+    class_value = libv.make_classes_values(classvalue_filename)
+else:
+    print(f"Файл {classvalue_filename} не найден. Создайте его или проверьте путь.")
 
-model = libv.load_model(model_filename, classes_back)
-model.to(device)
+file_obj = Path(model_filename)
+
+if file_obj.exists():
+    model = libv.load_model(model_filename, classes_back)
+    model.to(device)
+else:
+    print(f"Файл {model_filename} не найден. Создайте его или проверьте путь.")
 
 
 
-teamodel = libv.load_tea_model(teamodel_name)
+file_obj = Path(teamodel_name)
+
+if file_obj.exists():
+    teamodel = libv.load_tea_model(teamodel_name)
+else:
+    print(f"Файл {teamodel_name} не найден. Создайте его или проверьте путь.")
+
+
 
 
 torch.cuda.empty_cache()
