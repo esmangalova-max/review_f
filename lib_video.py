@@ -60,7 +60,11 @@ def count_diff(frame, frame_back):
     if frame.shape[0] == frame_back.shape[0] and frame.shape[1] == frame_back.shape[1] and frame.shape[2] == frame_back.shape[2]:
         a = np.abs(frame[:, :, :] - frame_back[:, :, :])
     else:
-        a = np.abs(frame[:, :, :] - frame_back[:frame.shape[0], :frame.shape[1], :frame.shape[2]])
+        a = np.abs(frame[:min(frame.shape[0], frame_back.shape[0]), 
+                         :min(frame.shape[1], frame_back.shape[1]), 
+                         :min(frame.shape[2], frame_back.shape[2])] - frame_back[:min(frame.shape[0], frame_back.shape[0]), 
+                                                                                 :min(frame.shape[1], frame_back.shape[1]), 
+                                                                                 :min(frame.shape[2], frame_back.shape[2])])
     a1 = np.sum(a, axis = 2)
     d = np.argwhere(a1 > 110).shape[0]
     return d
@@ -1034,6 +1038,3 @@ def test_tea(model, frame, device = torch.device('cuda')):
     else:
         return False
 
-                
-                
-                
