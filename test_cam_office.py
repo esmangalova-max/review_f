@@ -44,22 +44,34 @@ try:
     menu_list, menu_day = libv.make_menu(menu_filename)
 except:
     print('Error. Daily Menu is not loaded')
-classes_back = libv.make_classes_back(classes_filename)
+    menu_list = pd.DataFrame()
+    menu_day = {}
+    
+try:    
+    classes_back = libv.make_classes_back(classes_filename)
+except:
+    print('Error. Back Menu is not loaded')
+    classes_back = {}
   
-
-class_value = libv.make_classes_values(classvalue_filename)
+try:    
+    class_value = libv.make_classes_values(classvalue_filename)
+except:
+    print('Error. Classes Values is not loaded')
+    class_value = {}
 
 try:
     model = libv.load_model(model_filename, classes_back)
     model.to(device)
 except:
     print('Error. Model is not loaded')
-
+    model = libv.load_model_base(model_filename, classes_back)
+    model.to(device)
 
 try:
     teamodel = libv.load_tea_model(teamodel_name)
 except:
     print('Error. Tea Model is not loaded')
+    teamodel = libv.load_tea_model_base(teamodel_name)
 
 torch.cuda.empty_cache()
 
@@ -142,7 +154,18 @@ while(iii < 500):
                     dishes_choosed = libv.choose_dish(outputs, classes_back, menu_list, class_value, frame, teamodel)
                 except:
                     print('Error. Dishes are not choosed') 
-                dishes = libv.test_image(dishes_choosed, menu_day)
+                    dishes_choosed = {}
+                    for i in range(0, 9):
+                        dishes_choosed[i] = []
+                        
+                
+                try:
+                    dishes = libv.test_image(dishes_choosed, menu_day)
+                except:
+                    print('Error. test_image is missed')
+                    dishes = {}
+                    for t in [1, 2, 3, 4, 5, 6, 7, 8]:
+                        dishes[t] = []
                     
                 #### Добавление блюд с предыдущего кадра
                     
@@ -151,6 +174,10 @@ while(iii < 500):
                         dishes_ = libv.compare(dishes_prev, dishes)
                     except:
                         print('Error. Dishes are not compared') 
+                        dishes_ = {}
+                        for i in range(0, 9):
+                            dishes_[i] = []
+
                     dishes_prev = copy.copy(dishes_)
                 else:
                     dishes_ = copy.copy(dishes)

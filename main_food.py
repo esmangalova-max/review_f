@@ -37,52 +37,41 @@ frame_height = int(height/2)
 out = cv2.VideoWriter('test0102.avi',cv2.VideoWriter_fourcc('M','J','P','G'), 5, (frame_width,frame_height))
 #out = ffmpegcv.VideoWriter('output.mp4', None, 25)
 
-
-file_obj = Path(menu_filename)
-
-if file_obj.exists():
+try:
     menu_list, menu_day = libv.make_menu(menu_filename)
-else:
-    print(f"Файл {menu_filename} не найден. Создайте его или проверьте путь.")
- 
- 
-file_obj = Path(classes_filename)
-
-if file_obj.exists():
+except:
+    print('Error. Daily Menu is not loaded')
+    menu_list = pd.DataFrame()
+    menu_day = {}
+    
+try:    
     classes_back = libv.make_classes_back(classes_filename)
-else:
-    print(f"Файл {classes_filename} не найден. Создайте его или проверьте путь.")
+except:
+    print('Error. Back Menu is not loaded')
+    classes_back = {}
   
-file_obj = Path(classvalue_filename)
-
-if file_obj.exists():
+try:    
     class_value = libv.make_classes_values(classvalue_filename)
-else:
-    print(f"Файл {classvalue_filename} не найден. Создайте его или проверьте путь.")
+except:
+    print('Error. Classes Values is not loaded')
+    class_value = {}
 
-file_obj = Path(model_filename)
-
-if file_obj.exists():
+try:
     model = libv.load_model(model_filename, classes_back)
     model.to(device)
-else:
-    print(f"Файл {model_filename} не найден. Создайте его или проверьте путь.")
+except:
+    print('Error. Model is not loaded')
+    model = libv.load_model_base(model_filename, classes_back)
+    model.to(device)
 
-
-
-file_obj = Path(teamodel_name)
-
-if file_obj.exists():
+try:
     teamodel = libv.load_tea_model(teamodel_name)
-else:
-    print(f"Файл {teamodel_name} не найден. Создайте его или проверьте путь.")
-
-
+except:
+    print('Error. Tea Model is not loaded')
+    teamodel = libv.load_tea_model_base(teamodel_name)
 
 
 torch.cuda.empty_cache()
-
-
         
 ec = [(255,0,0),
       (0,255,0),
@@ -119,12 +108,9 @@ ec = [(255,0,0),
 
 headers = ['Экстра', 'Салаты', 'Супы', 'Горячее', 'Гарниры', 'Напитки', 'Сухари, соусы', 'Хлебобулочные изделия', 'Прочее']
     
-    
-
 # Check if camera opened successfully
 if (cap.isOpened()== False): 
-  print("Error opening video stream or file")
- 
+    print("Error opening video stream or file")
  
 stay = 1
 iii = 0
@@ -187,13 +173,33 @@ while(cap.isOpened()):
                     t = time.time() - t
                 
                     # Отбор блюд согласно дневному меню
-                    dishes_choosed = libv.choose_dish(outputs, classes_back, menu_list, class_value, frame, teamodel)
-                    dishes = libv.test_image(dishes_choosed, menu_day)
+                    try:
+                        dishes_choosed = libv.choose_dish(outputs, classes_back, menu_list, class_value, frame, teamodel)
+                    except:
+                        print('Error. Dishes are not choosed') 
+                        dishes_choosed = {}
+                        for i in range(0, 9):
+                            dishes[i] = []
+                            dishes_choosed[i] = []
+                            
+                    try:
+                        dishes = libv.test_image(dishes_choosed, menu_day)
+                    except:
+                        print('Error. test_image is missed')
+                        dishes = {}
+                        for t in [1, 2, 3, 4, 5, 6, 7, 8]:
+                            dishes[t] = []
                     
                     #### Добавление блюд с предыдущего кадра
                     
                     if dishes_prev is not None:
-                        dishes_ = libv.compare(dishes_prev, dishes)
+                        try:
+                            dishes_ = libv.compare(dishes_prev, dishes)
+                        except:
+                            print('Error. Dishes are not compared') 
+                            dishes_ = {}
+                            for i in range(0, 9):
+                                dishes_[i] = []
                         dishes_prev = copy.copy(dishes_)
                     else:
                         dishes_ = copy.copy(dishes)

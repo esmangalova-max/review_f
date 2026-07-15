@@ -35,6 +35,12 @@ OVERLAP_THRESHOLD[6] = 0.6
 OVERLAP_THRESHOLD[7] = 0.6
 OVERLAP_THRESHOLD[8] = 0.5
 
+font                   = cv2.FONT_HERSHEY_COMPLEX        
+fontScale              = 1
+fontColor              = (255,255,255)
+thickness              = 1
+lineType               = 2   
+
 transform = transforms.Compose([
     ToTensor(),
     Resize((300,300))
@@ -101,7 +107,6 @@ def get_image(image, transforms=None):
     return image
 
 
-
 def get_valid_transform():
     """
     Преобразование изображения
@@ -110,7 +115,6 @@ def get_valid_transform():
     return A.Compose([
         ToTensorV2(p=1.0)
     ])
-
 
 
 def overfit(box1, box2):
@@ -485,14 +489,6 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
 
         return dishes_choosed
 
-font                   = cv2.FONT_HERSHEY_COMPLEX        
-fontScale              = 1
-fontColor              = (255,255,255)
-thickness              = 1
-lineType               = 2    
-
- 
-    
 
 def plot_image(frame, dishes, headers, ec):
     """
@@ -899,8 +895,6 @@ def make_menu(menu_filename):
         
     return menu_list, menu_day
 
-
-
 def make_classes_back(classes_filename):
     """
     Загрузка кодировки классов
@@ -918,7 +912,6 @@ def make_classes_back(classes_filename):
     """
     classes_back = joblib.load(classes_filename)
     return classes_back
-
 
 def make_classes_values(classes_filename):
     """
@@ -940,8 +933,6 @@ def make_classes_values(classes_filename):
     for i in range(class_back.shape[0]):
         class_values[class_back['id'].values[i]] = class_back['value'].values[i]
     return class_values
-
-
 
 def load_model(model_filename, classes_back):
     """
@@ -976,6 +967,33 @@ def load_model(model_filename, classes_back):
     
     return model              
 
+def load_model_base(classes_back):
+    """
+    Загрузка базвовой предобученной модели
+
+    Parameters
+    ----------
+    model_filename : text
+        filenane
+    classes_back : dict
+        кодировка классов
+    Returns
+    -------
+    model : faster cnn resnet50
+        предобученная модель
+    """
+    # load a model; pre-trained on COCO
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
+
+    num_classes = len(classes_back) + 1  # 1 class (wheat) + background
+
+    # get number of input features for the classifier
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+
+    # replace the pre-trained head with a new one
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+    
+    return model      
 
 def load_tea_model(model_name):
     """
@@ -1003,6 +1021,32 @@ def load_tea_model(model_name):
 
     a = torch.load(model_name, weights_only=False)
     model.load_state_dict(a)
+    device = torch.device('cuda')
+    model = model.to(device)
+    return model
+    
+def load_tea_model_base():
+    """
+    Загрузка базовой модели распознавания
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    model : resnet18
+        модель распознавания чая
+
+    """
+    model = torchvision.models.resnet18()
+    for param in model.parameters():
+        param.requires_grad = False
+    
+    model.fc = nn.Sequential(*[
+        nn.Linear(in_features=512, out_features=3),
+        nn.Softmax(dim=1)
+        ])
+
     device = torch.device('cuda')
     model = model.to(device)
     return model
