@@ -1,19 +1,29 @@
-
 import cv2
 import numpy as np
 import time
-
 import lib_video as libv
 import torch
-
 import copy
+import logging
+import os
+from collections import defaultdict, deque
+from typing import List, Tuple, Dict, Any
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+logger.info("Processing frame")
+
 #import ffmpegcv
 
 this_order = 0
 
-device = torch.device('cuda') #if torch.cuda.is_available() else torch.device('cpu')
+# Параметры устройства
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+logger.info(f"Using device: {device}")
 
-
+# Параметры видео
 menu_filename = 'TestVideo//0102.tsv'
 classes_filename = 'TestVideo//classes_back.joblib'
 model_filename = 'TestVideo//fasterrcnn_resnet50_fpn_530.pth'
@@ -29,65 +39,36 @@ out = cv2.VideoWriter('test0102.avi',cv2.VideoWriter_fourcc('M','J','P','G'), 5,
 #out = ffmpegcv.VideoWriter('output.mp4', None, 25)
 
 
+# Инициализация модели
+try:
+    menu_list, menu_day = libv.make_menu(menu_filename)
+    classes_back = libv.make_classes_back(classes_filename)
+    class_value = libv.make_classes_values(classvalue_filename)
+    model = libv.load_model(model_filename, classes_back)
+    model.to(device)
+    teamodel = libv.load_tea_model(teamodel_name)
+    torch.cuda.empty_cache()
+except Exception as e:
+    logger.error(f"Error initializing models: {e}")
+    raise
 
-menu_list, menu_day = libv.make_menu(menu_filename)
-classes_back = libv.make_classes_back(classes_filename)
-  
+# Цвета для отображения
+ec = [(255,0,0), (0,255,0), (0,0,255), (0,255,255), (255,0,255), (255,255,0),
+      (0,155,155), (255,0,255), (155,155,0), (155,50,0), (50,155,0), (0,50,155),
+      (0,105,155), (155,0,105), (105,155,0), (255,0,0), (0,255,0), (0,0,255),
+      (0,255,255), (255,0,255), (255,255,0), (0,155,155), (255,0,255), (155,155,0),
+      (155,50,0)]
 
-class_value = libv.make_classes_values(classvalue_filename)
-
-model = libv.load_model(model_filename, classes_back)
-model.to(device)
-
-
-
-teamodel = libv.load_tea_model(teamodel_name)
-
-
-torch.cuda.empty_cache()
-
-
-        
-ec = [(255,0,0),
-      (0,255,0),
-      (0,0,255),
-      (0,255,255),
-      (255,0,255),
-      (255,255,0),
-      (0,155,155),
-      (255,0,255),
-      (155,155,0),
-      (155,50,0),
-      (50,155,0),
-      (0,50,155),
-      (0,105,155),
-      (155,0,105),
-      (105,155,0),
-      (255,0,0),
-      (0,255,0),
-      (0,0,255),
-      (0,255,255),
-      (255,0,255),
-      (255,255,0),
-      (0,155,155),
-      (255,0,255),
-      (155,155,0),
-      (155,50,0),
-      (50,155,0),
-      (0,50,155),
-      (0,105,155),
-      (155,0,105),
-      (105,155,0),
-      
-     ]
 
 headers = ['Экстра', 'Салаты', 'Супы', 'Горячее', 'Гарниры', 'Напитки', 'Сухари, соусы', 'Хлебобулочные изделия', 'Прочее']
     
     
 
 # Check if camera opened successfully
-if (cap.isOpened()== False): 
-  print("Error opening video stream or file")
+if not cap.isOpened():
+    logger.error("Error opening video stream or file")
+    raise IOError("Cannot open video stream")
+
  
  
 stay = 1
@@ -151,7 +132,7 @@ while(cap.isOpened()):
                     t = time.time() - t
                 
                     # Отбор блюд согласно дневному меню
-                    dishes_choosed = libv.choose_dish(outputs, classes_back, menu_list, class_value, frame, teamodel)
+                    dishes_choosed = libv.choose_dish(outputs[0], classes_back, menu_list, class_value, frame, teamodel)
                     dishes = libv.test_image(dishes_choosed, menu_day)
                     
                     #### Добавление блюд с предыдущего кадра
