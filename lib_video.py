@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Feb 13 16:48:43 2025
 
-@author: User
-"""
+import os
 import numpy as np
+from numpy import ndarray
 import pandas as pd
 import cv2
 import albumentations as A
@@ -27,7 +25,8 @@ transform = transforms.Compose([
     Resize((300,300))
 ])
 
-def count_diff(frame, frame_back):
+def count_diff(frame: ndarray, 
+               frame_back: ndarray) -> int:
     """
     
 
@@ -49,7 +48,8 @@ def count_diff(frame, frame_back):
     d = np.argwhere(a1 > 110).shape[0]
     return d
 
-def get_image(image, transforms=None):
+def get_image(image: ndarray, 
+              transforms=None : Callable[[ndarray], ndarray]) -> ndarray:
     """
     
 
@@ -93,7 +93,8 @@ def get_valid_transform():
 
 
 
-def overfit(box1, box2):
+def overfit(box1: ndarray, 
+            box2: ndarray) -> int:
     """
     Доля пересечания рамок блюд
 
@@ -110,194 +111,260 @@ def overfit(box1, box2):
         Доля площади пересечения рамок к наименьшей рамке
 
     """
-    a = min(box1[2], box2[2]) - max(box1[0], box2[0])
-    b = min(box1[3], box2[3]) - max(box1[1], box2[1])
-    s1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
-    s2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+	
+	
+	try:
+        a = min(box1[2], box2[2]) - max(box1[0], box2[0])
+        b = min(box1[3], box2[3]) - max(box1[1], box2[1])
+        s1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        s2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
 
-    if a > 0 and b > 0:
-        s = a*b/min(s1,s2)
-        return s
-    else:
-        return 0
-
-def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
-        """
-        Выбор распознанных блюд согласно дневному меню при пересечении рамок
-
-        Parameters
-        ----------
-        outputs : dict
-            Прогнозы сети: keys: boxes - рамки блюд (list), labels - метки классов (list), scores - вероятность принадлежности к классу (list)
-        classes_back : dict
-            Преобразование классов в тип блюда (кожировка групп блюда)
-        menu_list : pd.DataFrame
-            Дневное меню
-
-        Returns
-        -------
-        dishes_choosed : dict
-            Распознанные блюда по категориям
-
-        """
-        N = 0
-        menu_day = {}
-        for i in range(1, 9):
-            menu_day[i] = menu_list[menu_list['type'] == i]
+        if a > 0 and b > 0:
+            s = a*b/min(s1,s2)
+            return s
         
-        it = 0
+		return 0
+		
+	except Exception as e:
+	    return 0
 
-        dishes = {}
-        dishes_choosed = {}
-        for i in range(0, 9):
-            dishes[i] = []
-            dishes_choosed[i] = []
+def no_condition(dishes_choosed, n, n2, category_index, used):
+    if n['in'] == 0:
+        used = True
+    return dishes_choosed, used 
+        
+def soup_condition(dishes_choosed, n, n2, category_index, used):
+    if n2['in'] == 0 and n['in'] == 1:
+        dishes_choosed[category_index].remove(n2)
+        dishes_choosed[category_index].append(n)
+    used = True
+    return dishes_choosed, used 
+    
+def salsd_condition(dishes_choosed, n, n2, category_index, used):
+    if n2['in'] == 0 and n['in'] == 1:
+        dishes_choosed[category_index].remove(n2)
+        dishes_choosed[category_index].append(n)
+    elif n['in'] == 1 and n2['in'] == 1:
+        if 'class_2' not in n:
+            n2['class_2'] = n['class']
+    used = True
+    return dishes_choosed, used 
+    
+def main_condition(dishes_choosed, n, n2, category_index, used):
+    if n2['in'] == 0 and n['in'] == 1:
+        dishes_choosed[dishes_choosed].remove(n2)
+        dishes_choosed[dishes_choosed].append(n)
+    elif n['in'] == 1 and n2['in'] == 1 and n2['class'] != n['class']:
+        if 'class_2' not in n2:
+            n2['class_2'] = n['class']
+    used = True
+    return dishes_choosed, used   
 
-        while outputs[N]['scores'][it].detach().numpy() > class_value[int(outputs[N]['labels'][it].numpy())] and it < len(outputs[N]['boxes']) - 1:
-            box = outputs[N]['boxes'][it].detach().numpy().astype(int)
-            if box[3] > 220 and box[2] > 600 and box[1] < 980 and box[0] < 1700:
-                class_this = classes_back[int(outputs[N]['labels'][it].numpy())]
+def dress_condition(dishes_choosed, n, n2, category_index, used):
+    if n2['in'] == 0 and n['in'] == 1:
+        dishes_choosed[4].remove(n2)
+        dishes_choosed[4].append(n)
+        used = True
+    if n['in'] == 0 and n2['in'] == 1:
+        used = True
+    return dishes_choosed, used     
+    
+ def drink_condition(dishes_choosed, n, n2, category_index, used):
+    if n2['in'] == 0 and n['in'] == 1 and n['class'] < 900:
+        dishes_choosed[5].remove(n2)
+        dishes_choosed[5].append(n)
+        used = True
+    elif n2['class'] == 802 and n['class'] == 901:
+        used = True
+    elif n['class'] < 900:
+        used = True
+    return dishes_choosed, used   
+        
+def process_category(dishes, dishes_choosed, category_index, threshold, conditions, extra_conditions):
+    for n in dishes[category_index]:
+        used = False
+        for n2 in dishes_choosed[category_index]:
+            s = overfit(n['box'], n2['box'])
+            if s > threshold and not used:
+                # Обработка условий
+                dishes_choosed, used = conditions(dishes_choosed, n, n2, category_index, used)
+                if extra_conditions == 1:
+                    if s > 0.2:
+                        if n['class'] == n2['class']:
+                            used = True
+                
+        if not used:
+            dishes_choosed[category_index].append(n)
+    return dishes_choosed 
 
-                if class_this == [904, 705, 706, 1602, 1603]:
-                    dish = {}
-                    dish['class'] = class_this
-                    dish['box'] = outputs[N]['boxes'][it].detach().numpy().astype(int)
-                    dish['scores'] = outputs[N]['scores'][it].detach().numpy()
-                    if class_this in menu_list.values:
-                        dish['in'] = 1
-                    else:
-                        dish['in'] = 0
-                    dish['drop'] = 0
 
-                    dishes[8].append(dish)
+def choose_dish(outputs_n, 
+                classes_back, 
+				menu_list, 
+				class_value, 
+				image, 
+				teamodel):
+    """
+    Выбор распознанных блюд согласно дневному меню при пересечении рамок
+
+    Parameters
+    ----------
+    outputs : dict
+        Прогнозы сети: keys: boxes - рамки блюд (list), labels - метки классов (list), scores - вероятность принадлежности к классу (list)
+    classes_back : dict
+        Преобразование классов в тип блюда (кожировка групп блюда)
+    menu_list : pd.DataFrame
+        Дневное меню
+
+    Returns
+    -------
+    dishes_choosed : dict
+        Распознанные блюда по категориям
+
+    """
+		
+    menu_day = {}
+    for i in range(1, 9):
+        menu_day[i] = menu_list[menu_list['type'] == i]
+        
+    it = 0
+
+    dishes = {}
+    dishes_choosed = {}
+    for i in range(0, 9):
+        dishes[i] = []
+        dishes_choosed[i] = []
+
+    while outputs_n['scores'][it].detach().numpy() > class_value[int(outputs_n['labels'][it].numpy())] and it < len(outputs_n['boxes']) - 1:
+        box = outputs_n['boxes'][it].detach().numpy().astype(int)
+        if box[3] > 220 and box[2] > 600 and box[1] < 980 and box[0] < 1700:
+            class_this = classes_back[int(outputs_n['labels'][it].numpy())]
+
+            if class_this == [904, 705, 706, 1602, 1603]:
+                dish = {}
+                dish['class'] = class_this
+                dish['box'] = outputs_n['boxes'][it].detach().numpy().astype(int)
+                dish['scores'] = outputs_n['scores'][it].detach().numpy()
+                if class_this in menu_list.values:
+                    dish['in'] = 1
+                else:
+                    dish['in'] = 0
+                dish['drop'] = 0
+
+                dishes[8].append(dish)
                     
-                ### Добавки к блюдам (яйцо, помидор)
-                if class_this in [414, 411]:
-                    dish = {}
-                    dish['class'] = class_this
-                    dish['box'] = outputs[N]['boxes'][it].detach().numpy().astype(int)
-                    dish['scores'] = outputs[N]['scores'][it].detach().numpy()
-                    if class_this in menu_list.values:
-                        dish['in'] = 1
-                    else:
-                        dish['in'] = 0
-                    dish['drop'] = 0
+            ### Добавки к блюдам (яйцо, помидор)
+            if class_this in [414, 411]:
+                dish = {}
+                dish['class'] = class_this
+                dish['box'] = outputs_n['boxes'][it].detach().numpy().astype(int)
+                dish['scores'] = outputs_n['scores'][it].detach().numpy()
+                if class_this in menu_list.values:
+                    dish['in'] = 1
+                else:
+                    dish['in'] = 0
+                dish['drop'] = 0
 
-                    dishes[0].append(dish)
+                dishes[0].append(dish)
 
-                ### Соусы
-                elif class_this == 700 or (class_this >= 1000 and class_this <= 1010):
-                    dish = {}
-                    dish['class'] = class_this
-                    dish['box'] = outputs[N]['boxes'][it].detach().numpy().astype(int)
-                    dish['scores'] = outputs[N]['scores'][it].detach().numpy()
-                    if class_this in menu_list.values:
-                        dish['in'] = 1
-                    else:
-                        dish['in'] = 0
-                    dish['drop'] = 0
+            ### Соусы
+            elif class_this == 700 or (class_this >= 1000 and class_this <= 1010):
+                dish = {}
+                dish['class'] = class_this
+                dish['box'] = outputs_n['boxes'][it].detach().numpy().astype(int)
+                dish['scores'] = outputs_n['scores'][it].detach().numpy()
+                if class_this in menu_list.values:
+                    dish['in'] = 1
+                else:
+                    dish['in'] = 0
+                dish['drop'] = 0
 
-                    dishes[6].append(dish)
+                dishes[6].append(dish)
                     
-                ### Супы
-                elif class_this < 200:
-                    dish = {}
-                    dish['class'] = class_this
-                    dish['box'] = outputs[N]['boxes'][it].detach().numpy().astype(int)
-                    dish['scores'] = outputs[N]['scores'][it].detach().numpy()
-                    if class_this in menu_day[2].values:
-                        dish['in'] = 1
-                    else:
-                        dish['in'] = 0
-                    dish['drop'] = 0
+            ### Супы
+            elif class_this < 200:
+                dish = {}
+                dish['class'] = class_this
+                dish['box'] = outputs_n['boxes'][it].detach().numpy().astype(int)
+                dish['scores'] = outputs_n['scores'][it].detach().numpy()
+                if class_this in menu_day[2].values:
+                    dish['in'] = 1
+                else:
+                    dish['in'] = 0
+                dish['drop'] = 0
 
-                    dishes[2].append(dish)
+                dishes[2].append(dish)
                     
                     
-                ### Горячее
-                elif class_this < 300 or class_this == 315:
-                    dish = {}
-                    dish['class'] = class_this
-                    dish['box'] = outputs[N]['boxes'][it].detach().numpy().astype(int)
-                    dish['scores'] = outputs[N]['scores'][it].detach().numpy()
-                    if class_this in menu_day[3].values:
-                        dish['in'] = 1
-                    else:
-                        dish['in'] = 0
-                    dish['drop'] = 0
+            ### Горячее
+            elif class_this < 300 or class_this == 315:
+                dish = {}
+                dish['class'] = class_this
+                dish['box'] = outputs_n['boxes'][it].detach().numpy().astype(int)
+                dish['scores'] = outputs_n['scores'][it].detach().numpy()
+                if class_this in menu_day[3].values:
+                    dish['in'] = 1
+                else:
+                    dish['in'] = 0
+                dish['drop'] = 0
 
-                    dishes[3].append(dish)
+                dishes[3].append(dish)
                     
-                ### Гарнир
-                elif class_this < 400:
-                    dish = {}
-                    dish['class'] = class_this
-                    dish['box'] = outputs[N]['boxes'][it].detach().numpy().astype(int)
-                    dish['scores'] = outputs[N]['scores'][it].detach().numpy()
-                    if class_this in menu_day[4].values:
-                        dish['in'] = 1
-                    else:
-                        dish['in'] = 0
-                    dish['drop'] = 0
+            ### Гарнир
+            elif class_this < 400:
+                dish = {}
+                dish['class'] = class_this
+                dish['box'] = outputs_n['boxes'][it].detach().numpy().astype(int)
+                dish['scores'] = outputs_n['scores'][it].detach().numpy()
+                if class_this in menu_day[4].values:
+                    dish['in'] = 1
+                else:
+                    dish['in'] = 0
+                dish['drop'] = 0
 
-                    dishes[4].append(dish)
+                dishes[4].append(dish)
 
-                ### Салаты, сало
-                elif class_this < 500 or class_this == 701:
-                    dish = {}
-                    dish['class'] = class_this
-                    dish['box'] = outputs[N]['boxes'][it].detach().numpy().astype(int)
-                    dish['scores'] = outputs[N]['scores'][it].detach().numpy()
-                    if class_this in menu_day[1].values:
-                        dish['in'] = 1
-                    else:
-                        dish['in'] = 0
-                    dish['drop'] = 0
+            ### Салаты, сало
+            elif class_this < 500 or class_this == 701:
+                dish = {}
+                dish['class'] = class_this
+                dish['box'] = outputs_n['boxes'][it].detach().numpy().astype(int)
+                dish['scores'] = outputs_n['scores'][it].detach().numpy()
+                if class_this in menu_day[1].values:
+                    dish['in'] = 1
+                else:
+                    dish['in'] = 0
+                dish['drop'] = 0
 
-                    dishes[1].append(dish)
+                dishes[1].append(dish)
 
-                ### Булки
-                elif class_this < 700:
-                    dish = {}
-                    dish['class'] = class_this
-                    dish['box'] = outputs[N]['boxes'][it].detach().numpy().astype(int)
-                    dish['scores'] = outputs[N]['scores'][it].detach().numpy()
-                    if class_this in menu_day[7].values:
-                        dish['in'] = 1
-                    else:
-                        dish['in'] = 0
-                    dish['drop'] = 0
+            ### Булки
+            elif class_this < 700:
+                dish = {}
+                dish['class'] = class_this
+                dish['box'] = outputs_n['boxes'][it].detach().numpy().astype(int)
+                dish['scores'] = outputs_n['scores'][it].detach().numpy()
+                if class_this in menu_day[7].values:
+                    dish['in'] = 1
+                else:
+                    dish['in'] = 0
+                dish['drop'] = 0
 
-                    dishes[7].append(dish)
+                dishes[7].append(dish)
                     
-                ### Напитки
-                elif class_this < 1000:
-                    if class_this == 901:
-                        box = outputs[N]['boxes'][it].detach().numpy().astype(int)
-                        image = image[box[1]:box[3], box[0]:box[2], :]
-                        #teamodel.to(device)
-                        outputs_ = test_tea(teamodel, image)
+            ### Напитки
+            elif class_this < 1000:
+                if class_this == 901:
+                    box = outputs_n['boxes'][it].detach().numpy().astype(int)
+                    image = image[box[1]:box[3], box[0]:box[2], :]
+                    #teamodel.to(device)
+                    outputs_ = test_tea(teamodel, image)
                         
-                        if outputs_:
-                            dish = {}
-                            dish['class'] = class_this
-                            dish['box'] = outputs[N]['boxes'][it].detach().numpy().astype(int)
-                            dish['scores'] = outputs[N]['scores'][it].detach().numpy()
-                            if class_this in menu_day[5].values:
-                                dish['in'] = 1
-                            else:
-                                dish['in'] = 0
-                            dish['drop'] = 0
-
-                            dishes[5].append(dish)
-
-                        
-                    else:
-                    
+                    if outputs_:
                         dish = {}
                         dish['class'] = class_this
-                        dish['box'] = outputs[N]['boxes'][it].detach().numpy().astype(int)
-                        dish['scores'] = outputs[N]['scores'][it].detach().numpy()
+                        dish['box'] = outputs_n['boxes'][it].detach().numpy().astype(int)
+                        dish['scores'] = outputs_n['scores'][it].detach().numpy()
                         if class_this in menu_day[5].values:
                             dish['in'] = 1
                         else:
@@ -306,164 +373,94 @@ def choose_dish(outputs, classes_back, menu_list, class_value, image, teamodel):
 
                         dishes[5].append(dish)
 
-                
-            it += 1
+                        
+                else:
+                    
+                    dish = {}
+                    dish['class'] = class_this
+                    dish['box'] = outputs_n['boxes'][it].detach().numpy().astype(int)
+                    dish['scores'] = outputs_n['scores'][it].detach().numpy()
+                    if class_this in menu_day[5].values:
+                        dish['in'] = 1
+                    else:
+                        dish['in'] = 0
+                    dish['drop'] = 0
 
-        # Салаты
-        for n in dishes[1]:
+                    dishes[5].append(dish)
+
+                
+        it += 1  
+    
+    
+    # Салаты
+    dishes_choosed = process_category(dishes, dishes_choosed, 1, 0.5, salad_conditions, -1)
+                
+    # Супы
+    dishes_choosed = process_category(dishes, dishes_choosed, 2, 0.5, soup_conditions, -1)
+                                
+    # Прочее    
+    dishes_choosed = process_category(dishes, dishes_choosed, 8, 0.5, soup_conditions, -1)
+    
+    # Горячее
+    dishes_choosed = process_category(dishes, dishes_choosed, 3, 0.8, main_conditions, -1)
+ 
+    # Гарниры
+    dishes_choosed = process_category(dishes, dishes_choosed, 4, 0.6, dress_conditions, 1)
+                
+    # Напитки
+    dishes_choosed = process_category(dishes, dishes_choosed, 5, 0.5, drink_conditions, -1)
+                
+    # Булки
+    dishes_choosed = process_category(dishes, dishes_choosed, 7, 0.6, no_conditions, -1)
+            
+    # Сухари, соусы
+    for n in dishes[6]:
+        if n['class'] == 1000:
             used = False
             for n2 in dishes_choosed[1]:
                 s = overfit(n['box'], n2['box'])
-                if s > 0.5 and used is False:
-                    if n2['in'] == 0 and n['in'] == 1:
-                        dishes_choosed[1].remove(n2)
-                        dishes_choosed[1].append(n)
-                    elif n['in'] == 1 and n2['in'] == 1:
-                        if 'class_2' not in n:
-                            n2['class_2'] = n['class']
+                if s > 0.6:
                     used = True
-            if used is False:
-                dishes_choosed[1].append(n)
-                
-                
-        # Супы
-        for n in dishes[2]:
-            used = False
-            for n2 in dishes_choosed[2]:
-                s = overfit(n['box'], n2['box'])
-                if s > 0.5 and used is False:
-                    if n2['in'] == 0 and n['in'] == 1:
-                        dishes_choosed[2].remove(n2)
-                        dishes_choosed[2].append(n)
-                    used = True
-            if used is False:
-                dishes_choosed[2].append(n)
-                
-                
-        # Прочее        
-        for n in dishes[8]:
-            used = False
-            for n2 in dishes_choosed[8]:
-                s = overfit(n['box'], n2['box'])
-                if s > 0.5 and used is False:
-                    if n2['in'] == 0 and n['in'] == 1:
-                        dishes_choosed[8].remove(n2)
-                        dishes_choosed[8].append(n)
-                    used = True
-            if used is False:
-                dishes_choosed[8].append(n)
-                
-        # Горячее
-        for n in dishes[3]:
-            used = False
-            for n2 in dishes_choosed[3]:
-                s = overfit(n['box'], n2['box'])
-                if s > 0.8 and used is False:
-                    if n2['in'] == 0 and n['in'] == 1:
-                        dishes_choosed[3].remove(n2)
-                        dishes_choosed[3].append(n)
-                    elif n['in'] == 1 and n2['in'] == 1 and n2['class'] != n['class']:
-                        if 'class_2' not in n2:
-                            n2['class_2'] = n['class']
-                    used = True
-            if used is False:
-                dishes_choosed[3].append(n)
-        
-        # Гарниры
-        for n in dishes[4]:
-            used = False
-            for n2 in dishes_choosed[4]:
-                s = overfit(n['box'], n2['box'])
-                if s > 0.6 and used is False:
-                    if n2['in'] == 0 and n['in'] == 1:
-                        dishes_choosed[4].remove(n2)
-                        dishes_choosed[4].append(n)
-                        used = True
-                    if n['in'] == 0 and n2['in'] == 1:
-                        used = True
-                if s > 0.2:
-                    if n['class'] == n2['class']:
-                        used = True
-                    
-            if used is False:
-                dishes_choosed[4].append(n)
-                
-        # Напитки
-        for n in dishes[5]:
-            used = False
-            for n2 in dishes_choosed[5]:
-                s = overfit(n['box'], n2['box'])
-
-                if s > 0.5 and used is False:
-                    if n2['in'] == 0 and n['in'] == 1 and n['class'] < 900:
-                        dishes_choosed[5].remove(n2)
-                        dishes_choosed[5].append(n)
-                        used = True
-                    elif n2['class'] == 802 and n['class'] == 901:
-                        used = True
-                    elif n['class'] < 900:
-                        used = True
-                        
-            if used is False:
-                dishes_choosed[5].append(n)
-                
-        # Булки
-        for n in dishes[7]:
-            used = False
             for n2 in dishes_choosed[7]:
                 s = overfit(n['box'], n2['box'])
-                if s > 0.6 and used is False:
+                if s > 0.6:
                     used = True
-            if n['in'] == 1 and used is False:
-                dishes_choosed[7].append(n)
-        # Сухари, соусы
-        for n in dishes[6]:
-            if n['class'] == 1000:
-                used = False
-                for n2 in dishes_choosed[1]:
-                    s = overfit(n['box'], n2['box'])
-                    if s > 0.6:
-                        used = True
-                for n2 in dishes_choosed[7]:
-                    s = overfit(n['box'], n2['box'])
-                    if s > 0.6:
-                        used = True
-                if used is False:
-                    dishes_choosed[6].append(n)
+            if used is False:
+                dishes_choosed[6].append(n)
 
-            elif n['class'] == 700:
-                used = False
-                for n2 in dishes_choosed[1]:
-                    s = overfit(n['box'], n2['box'])
-                    if s > 0.6:
-                        used = True
-                if used is False:
-                    dishes_choosed[6].append(n)
-        # Экстра
-        for n in dishes[0]:
-            if n['class'] == 414 or n['class'] == 411:
-                used = False
-                for n2 in dishes_choosed[1]:
-                    s = overfit(n['box'], n2['box'])
-                    if s > 0.6:
-                        dishes_choosed[1].remove(n2)
-                        if 'add' not in n2:
-                            n2['add'] = [n['class']]
-                        else:
-                            n2['add'].append(n['class'])
-                        dishes_choosed[1].append(n2)
+        elif n['class'] == 700:
+            used = False
+            for n2 in dishes_choosed[1]:
+                s = overfit(n['box'], n2['box'])
+                if s > 0.6:
+                    used = True
+            if used is False:
+                dishes_choosed[6].append(n)
+    # Экстра
+    for n in dishes[0]:
+        if n['class'] == 414 or n['class'] == 411:
+            used = False
+            for n2 in dishes_choosed[1]:
+                s = overfit(n['box'], n2['box'])
+                if s > 0.6:
+                    dishes_choosed[1].remove(n2)
+                    if 'add' not in n2:
+                        n2['add'] = [n['class']]
+                    else:
+                        n2['add'].append(n['class'])
+                    dishes_choosed[1].append(n2)
                         
-                for n2 in dishes_choosed[2]:
-                    s = overfit(n['box'], n2['box'])
-                    if s > 0.6:
-                        dishes_choosed[2].remove(n2)
-                        if 'add' not in n2:
-                            n2['add'] = [n['class']]
-                        else:
-                            n2['add'].append(n['class'])
-                        dishes_choosed[2].append(n2)
+            for n2 in dishes_choosed[2]:
+                s = overfit(n['box'], n2['box'])
+                if s > 0.6:
+                    dishes_choosed[2].remove(n2)
+                    if 'add' not in n2:
+                        n2['add'] = [n['class']]
+                    else:
+                        n2['add'].append(n['class'])
+                    dishes_choosed[2].append(n2)
 
-        return dishes_choosed
+    return dishes_choosed
 
 font                   = cv2.FONT_HERSHEY_COMPLEX        
 fontScale              = 1
@@ -474,7 +471,10 @@ lineType               = 2
  
     
 
-def plot_image(frame, dishes, headers, ec):
+def plot_image(frame, 
+               dishes, 
+			   headers, 
+			   ec):
     """
     
 
@@ -540,7 +540,8 @@ def plot_image(frame, dishes, headers, ec):
         
     return img, sample
     
-def test_image(dishes_choosed, menu_day):
+def test_image(dishes_choosed, 
+               menu_day):
     """
     
 
@@ -606,17 +607,18 @@ def test_image(dishes_choosed, menu_day):
                         cls_[r[0]] = 1
                     else:
                         cls_[r[0]] += 1
-                max_cl = max(cls_, key=cls_.get)
-                max_cl = cls_[max_cl]
-                for this in cls_:
-                    if cls_[this] == max_cl:
-                        if len(text) == 0:
-                            text = menu_day[t]['name'].values[this]
-                        else:
-                            text += ' # \n' + menu_day[t]['name'].values[this]
+			    if len(cls_) > 0:
+				    max_cl = max(cls_, key=cls_.get)
+                    max_cl = cls_[max_cl]
+                    for this in cls_:
+                        if cls_[this] == max_cl:
+                            if len(text) == 0:
+                                text = menu_day[t]['name'].values[this]
+                            else:
+                                text += ' # \n' + menu_day[t]['name'].values[this]
              
             dish = {}
-            dish['text'] = text#.replace(' # \n', '$').replace(' # ', '$')
+            dish['text'] = text
             dish['box'] = n['box']
             dish['scores'] = n['scores']
              
@@ -627,7 +629,8 @@ def test_image(dishes_choosed, menu_day):
     return dishes 
 
 
-def compare(dishes_old, dishes_new):
+def compare(dishes_old, 
+            dishes_new):
     """
     
 
@@ -827,11 +830,16 @@ def make_image(frame, dishes_, headers, ec, frame_width, frame_height):
 
     """
     img, sample = plot_image(frame, dishes_, headers, ec)
-    hl = np.hstack((img,sample))
+    if img.shape[1] > 0 and sample.shape[1] > 0:
+		hl = np.hstack((img, sample))
+	else:
+		raise ValueError("Empty image arrays")
     hl = cv2.resize(hl, (frame_width,frame_height), interpolation= cv2.INTER_LINEAR)
     return hl
 
-def make_image_empty(frame, frame_width, frame_height):    
+def make_image_empty(frame, 
+                     frame_width, 
+					 frame_height):    
     """
     Отображение результатов распознавания (пустой поднос)
 
@@ -850,9 +858,14 @@ def make_image_empty(frame, frame_width, frame_height):
         отображение результатов распознавания (пустой поднос)
 
     """        
+	
     img = np.zeros((1080,1000,3), np.uint8)
-    hl = np.hstack((img,frame))
-    hl = cv2.resize(hl, (frame_width,frame_height), interpolation= cv2.INTER_LINEAR)     
+    if img.shape[1] > 0 and sample.shape[1] > 0:
+		hl = np.hstack((img, sample))
+	else:
+		raise ValueError("Empty image arrays")
+    hl = cv2.resize(hl, (frame_width,frame_height), interpolation= cv2.INTER_LINEAR) 
+    
     return hl           
                 
 def make_menu(menu_filename):
@@ -872,6 +885,9 @@ def make_menu(menu_filename):
         дневное меню по категориям
 
     """
+	
+	if not os.path.exists(menu_filename):
+		raise FileNotFoundError(f"File {menu_filename} not found")
     menu_list = pd.read_csv(menu_filename, sep = '\t')
     menu_day = {}
     for i in range(1, 9):
@@ -881,7 +897,7 @@ def make_menu(menu_filename):
 
 
 
-def make_classes_back(classes_filename):
+def make_classes_back(classes_filename: str) -> Dict:
     """
     Загрузка кодировки классов
 
@@ -896,11 +912,13 @@ def make_classes_back(classes_filename):
         кодировка классов
 
     """
+	if not os.path.exists(classes_filename):
+		raise FileNotFoundError(f"File {classes_filename} not found")
     classes_back = joblib.load(classes_filename)
     return classes_back
 
 
-def make_classes_values(classes_filename):
+def make_classes_values(classes_filename: str) -> Dict:
     """
     Загрузка значимости классов
 
@@ -915,6 +933,8 @@ def make_classes_values(classes_filename):
         значимость классов
 
     """
+	if not os.path.exists(classes_filename):
+		raise FileNotFoundError(f"File {classes_filename} not found")
     class_back = pd.read_csv(classes_filename)
     class_values = {}
     for i in range(class_back.shape[0]):
@@ -923,7 +943,8 @@ def make_classes_values(classes_filename):
 
 
 
-def load_model(model_filename, classes_back):
+def load_model(model_filename, 
+               classes_back):
     """
     Загрузка предобученной модели
 
@@ -938,6 +959,11 @@ def load_model(model_filename, classes_back):
     model : faster cnn resnet50
         предобученная модель
     """
+    if not os.path.exists(model_filename):
+		raise FileNotFoundError(f"File {model_filename} not found")
+    if not os.path.exists(classes_back):
+		raise FileNotFoundError(f"File {classes_back} not found")
+		
     # load a model; pre-trained on COCO
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
 
@@ -972,6 +998,9 @@ def load_tea_model(model_name):
         модель распознавания чая
 
     """
+	if not os.path.exists(model_name):
+		raise FileNotFoundError(f"File {model_name} not found")
+		
     model = torchvision.models.resnet18()
     for param in model.parameters():
         param.requires_grad = False
@@ -1008,16 +1037,14 @@ def test_tea(model, frame, device = torch.device('cuda')):
         False - только кружка
 
     """
+	
     f = np.array(frame)
     f = transform(frame).to(device)
     outputs = model(f.unsqueeze(0))
     outputs = outputs.cpu().detach().numpy()
     a = np.argmax(outputs)
+	
     if a < 2:
         return True
-    else:
-        return False
-
-                
-                
-                
+    
+	return False
